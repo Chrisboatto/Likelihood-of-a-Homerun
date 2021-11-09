@@ -1,0 +1,159 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+
+# Packages Needed
+```{r}
+require(dplyr)
+require(randomForest)
+require(ggplot2)
+require(ROCR)
+require(corrplot)
+require(pROC)
+library(dplyr)
+library(randomForest)
+library(ggplot2)
+library(ROCR)
+library(corrplot)
+library(pROC)
+```
+
+```{r}
+url <- "https://raw.githubusercontent.com/Chrisboatto/Likelihood-of-a-Homerun/main/Balls%20in%20play.csv"
+```
+
+```{r}
+BallsInPlay <- read.csv(url)
+```
+
+```{r}
+str(BallsInPlay)
+```
+
+```{r}
+summary(BallsInPlay)
+```
+
+```{r}
+sum(is.na(BallsInPlay))
+```
+
+```{r}
+BallsInPlay <- na.omit(BallsInPlay)
+```
+
+```{r}
+sum(is.na(BallsInPlay))
+```
+
+```{r}
+unique(BallsInPlay$WEATHER)
+unique(BallsInPlay$WIND_DIRECTION)
+```
+
+```{r}
+boxplot(BallsInPlay[20:25], col = rainbow(14), main = "Box Plot of Pitch Type Metrics", xlab = "Pitch Type Metrics", ylab = "Scores")
+
+boxplot(BallsInPlay[26:29], col = rainbow(14), main = "Box Plot of Pitch Location Metrics", xlab = "Pitch Location Metrics", ylab = "Scores")
+
+boxplot(BallsInPlay[30:34], col = rainbow(14), main = "Box Plot of Hitting Metrics", xlab = "Categories", ylab = "Scores")
+```
+
+```{r}
+BallsInPlay <- filter(BallsInPlay, PITCH_VELOCITY > 65)
+BallsInPlay <- filter(BallsInPlay, HORIZONTAL_BREAK < 40)
+BallsInPlay <- filter(BallsInPlay, INDUCED_VERTICAL_BREAK < 40)
+```
+
+```{r}
+BallsInPlay_Cor <- cor(BallsInPlay[20:34])
+corrplot(BallsInPlay_Cor, type = "upper", order = 'hclust', tl.col = "blue")
+```
+
+```{r}
+set.seed(49838)
+
+train <- sample(nrow(BallsInPlay), 0.80*nrow(BallsInPlay), replace = FALSE)
+
+TrainSet <- BallsInPlay[train,]
+TestSet <- BallsInPlay[-train,]
+```
+
+```{r}
+baseModel <- randomForest(HOME_RUN_YES_OR_NO ~., data = TrainSet, importance = TRUE, ntrees = 50)
+```
+
+```{r}
+baseImp <- importance(baseModel)
+baseImp
+```
+
+```{r}
+baseImp <- as.data.frame(baseImp)
+ggplot(baseImp, aes(IncNodePurity, row.names(baseImp))) + 
+  geom_bar(stat = "identity", width = 0.1, fill = "black") + 
+  geom_point(shape = 21, size = 3, colour = "black", fill = "red", stroke = 2) + 
+  labs(title = "Home Run Importance", x = "Importance", y = "Variable")
+```
+
+```{r}
+plot(baseModel, col = "Red", main = "Base Model Error Chart")
+```
+
+```{r}
+newModel <- randomForest(HOME_RUN_YES_OR_NO ~ WIND_DIRECTION + WIND_SPEED + WEATHER + PITCH_LOCATION_HEIGHT + PITCH_LOCATION_SIDE + PITCH_VELOCITY + EXIT_VELOCITY + LAUNCH_ANGLE + LAUNCH_DIRECTION + TEMPERATURE + VERTICAL_APPROACH_ANGLE + HORIZONTAL_APPROACH_ANGLE + HORIZONTAL_BREAK + INDUCED_VERTICAL_BREAK, data = TrainSet, importance = TRUE, ntrees = 100, maxnodes = 5)
+```
+
+```{r}
+newImp <- importance(newModel)
+newImp
+
+newImp <- as.data.frame(newImp)
+ggplot(newImp, aes(IncNodePurity, row.names(newImp))) + 
+  geom_bar(stat = "identity", width = 0.1, fill = "black") + 
+  geom_point(shape = 21, size = 3, colour = "black", fill = "red", stroke = 2) + 
+  labs(title = "Home Run Importance", x = "Importance", y = "Variable")
+```
+
+```{r}
+plot(newModel, col = "red", main = "New Model Error Chart")
+```
+
+```{r}
+predTrainSet <- predict(newModel, TrainSet, type = "response")
+predTestSet <- predict(newModel, TestSet, type = "response")
+```
+
+```{r}
+TrainSet <- cbind(TrainSet, predTrainSet)
+TestSet <- cbind(TestSet, predTestSet)
+```
+
+```{r}
+names(TrainSet)[names(TrainSet) == "predTrainSet"] <- "HR_Pred"
+names(TestSet)[names(TestSet) == "predTestSet"] <- "HR_Pred"
+```
+
+```{r}
+HR_Full <- rbind(TrainSet, TestSet)
+```
+
+
+#ROC Curve
+
+```{r}
+roc_test <- roc(ifelse(TestSet$HOME_RUN_YES_OR_NO == "1", "1", "0"), as.numeric(TestSet$HR_Pred))
+roc_train <- roc(ifelse(TrainSet$HOME_RUN_YES_OR_NO == "1", "1", "0"), as.numeric(TrainSet$HR_Pred))
+plot(roc_test, col = "black", main = "Home Run ROC Graph")
+lines(roc_train, col = "red")
+```
+
+```{r}
+auc(HR_Full$HOME_RUN_YES_OR_NO, HR_Full$HR_Pred)
+```
+
