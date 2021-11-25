@@ -1,13 +1,18 @@
 ---
 title: "R Notebook"
-output: html_notebook
+output:
+  word_document: default
+  html_notebook: default
 ---
 
 This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
 
 Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
 
-# Packages Needed
+# The following project was completed to determine the likelihood of a home run every instance of a ball in play given a number of metrics. I chose to use a Random Forest model as it creates a ‘forest’ of decision trees where the output is the class selecting the most trees which removes bias within the data. Random Forest is one of the strongest predictive models that one can create and given the amount of data within the data set, I deemed it too great for that of a single decsion tree to handle. 
+
+# Below are the packages I used to create this model.
+
 ```{r}
 require(dplyr)
 require(randomForest)
@@ -22,6 +27,8 @@ library(ROCR)
 library(corrplot)
 library(pROC)
 ```
+
+# I first uploaded the data set in RStudio and checked its summary and structure to gain a better understanding of the data. I noticed that there were 98 NA values within the data set. This consitituted 0.1% of the data set so I deemed it prudent to omit them. I noticed two character attributes that I wanted to obtain a better understanding of the data within them. I decided to see the unique values within each and noticed they could definitely play a factor in predicting a home run.
 
 ```{r}
 url <- "https://raw.githubusercontent.com/Chrisboatto/Likelihood-of-a-Homerun/main/Balls%20in%20play.csv"
@@ -55,6 +62,7 @@ sum(is.na(BallsInPlay))
 unique(BallsInPlay$WEATHER)
 unique(BallsInPlay$WIND_DIRECTION)
 ```
+# I created the lolipop box plots below to gain a better understanding of the interquartile ranges amongst the numeric metrics and where the outliers are. Notice the two outliers amongst the break attributes. Both those outliers were on one single pitch, a fastball. This does not make sense as fastball are supposed to be almost as straight as an arrow. Having a break on your fastball over 40" is not normal and should be seen as an outlier. I used these box plots as a means to subset out any outliers within the data. I removed the two large breaks and and velocity seen under 65mph. Even though the first interquartile range starts at 84.7mph, I deemed it prudent to keep any pitches over 65mph within the data set simply because some pitchers have curveballs that are in the low 70's. Therefore, setting the subset to 65mph would ensure all curveballs were included. Any pitch recorded below that could be deemed a 'lob' from a position player.
 
 ```{r}
 boxplot(BallsInPlay[20:25], col = rainbow(14), main = "Box Plot of Pitch Type Metrics", xlab = "Pitch Type Metrics", ylab = "Scores")
@@ -70,10 +78,14 @@ BallsInPlay <- filter(BallsInPlay, HORIZONTAL_BREAK < 40)
 BallsInPlay <- filter(BallsInPlay, INDUCED_VERTICAL_BREAK < 40)
 ```
 
+# Below is a correlation plot depicting how well each metric is correlated to all others within the data set. The deeper the blue, the more positively correlated the metrics are and the deeper the red, the more negatively correlated.
+
 ```{r}
 BallsInPlay_Cor <- cor(BallsInPlay[20:34])
 corrplot(BallsInPlay_Cor, type = "upper", order = 'hclust', tl.col = "blue")
 ```
+
+# I then trained the data on an 80:20 train to test ratio based on random samples to avoid any bias. Making the ratios split at random is a key factor as I wanted to remove as much bias as possible throughout my entire model creation. I wanted to produce the most fair and unbiased model possible that way I can ensure the highest level of accuracy that way I know my model is correct.
 
 ```{r}
 set.seed(49838)
@@ -83,6 +95,8 @@ train <- sample(nrow(BallsInPlay), 0.80*nrow(BallsInPlay), replace = FALSE)
 TrainSet <- BallsInPlay[train,]
 TestSet <- BallsInPlay[-train,]
 ```
+
+# I then created a base model using the 'HOME_RUN_YES_OR_NO' variable as my dependent and using all others as my independents. This base model will allow me to gain an understanding of what metrics have the highest importance within the model. The importance metric shows how much of an influence the attribute has on the output. If the metric is too high then it could lead to domination thus resulting in an overfit. As you can see below, 'EVENT_RESULT' had the most influence on the dependent variable by a wide margin which is understandable as it shows results of the ball in play much like that of the binary event attributes do. This therefore shold be removed as it is redundant. 
 
 ```{r}
 baseModel <- randomForest(HOME_RUN_YES_OR_NO ~., data = TrainSet, importance = TRUE, ntrees = 50)
@@ -101,12 +115,18 @@ ggplot(baseImp, aes(IncNodePurity, row.names(baseImp))) +
   labs(title = "Home Run Importance", x = "Importance", y = "Variable")
 ```
 
+# Checking the error chart, the base model worked well at reducing the chance of errors.
+
 ```{r}
 plot(baseModel, col = "Red", main = "Base Model Error Chart")
 ```
 
+# I then created a new model on the same dependent variable but by removing the aforementioned 'EVENT_RESULT' column as well others that were not deemed to have an affect on the outcome. I stated the number of nodes to 5 and the number of trees at 100 to obtain an Area Under the Curve (AUC) accuracy metric of over 0.9 which can be found later in the assignment. After many attempts at tuning and pruning, those were the two amounts that I found gave me the best accuracy ratings.
+
+# Notice for this model 'EXIT_VELOCITY' and 'LAUNCH_ANGLE' were the main contributors to home runs. The harder you hit the ball and the higher it's initial trajectory is, the further the baseball will travel. Players that are able to do both at a high rate will make them highly likely to hit home runs. 
+
 ```{r}
-newModel <- randomForest(HOME_RUN_YES_OR_NO ~ WIND_DIRECTION + WIND_SPEED + WEATHER + PITCH_LOCATION_HEIGHT + PITCH_LOCATION_SIDE + PITCH_VELOCITY + EXIT_VELOCITY + LAUNCH_ANGLE + LAUNCH_DIRECTION + TEMPERATURE + VERTICAL_APPROACH_ANGLE + HORIZONTAL_APPROACH_ANGLE + HORIZONTAL_BREAK + INDUCED_VERTICAL_BREAK, data = TrainSet, importance = TRUE, ntrees = 100, maxnodes = 5)
+newModel <- randomForest(HOME_RUN_YES_OR_NO ~ WIND_DIRECTION + WIND_SPEED + WEATHER + PITCH_LOCATION_HEIGHT + PITCH_LOCATION_SIDE + PITCH_VELOCITY + EXIT_VELOCITY + LAUNCH_ANGLE + LAUNCH_DIRECTION + TEMPERATURE + VERTICAL_APPROACH_ANGLE + HORIZONTAL_APPROACH_ANGLE + HORIZONTAL_BREAK + INDUCED_VERTICAL_BREAK, data = TrainSet, importance = TRUE, ntrees = 200, maxnodes = 5)
 ```
 
 ```{r}
@@ -123,6 +143,10 @@ ggplot(newImp, aes(IncNodePurity, row.names(newImp))) +
 ```{r}
 plot(newModel, col = "red", main = "New Model Error Chart")
 ```
+
+# I used the ‘response’ method to predict the probability of each outcome being a home run. I wanted a numerical result for each observation rather than a value being assigned by using 'class'. I then bound the scores onto their respective sets that I predicted them from and changed the predictive column names to match each other that way I am then able to bind both the Train and Test sets back together to create one full data set. This will allow me to see all the predictions within one data set.
+
+# I created a Receiver Operator Characteristic (ROC) Curve and calculated the AUC below to show how well the model performed. Judging by the findings, the model performed excellently as the AUC was tabulated at 0.9555 giving a 95% accuracy rating while the ROC had an almost perfect curve to the top left corner showing that the model's supervised learning worked well.
 
 ```{r}
 predTrainSet <- predict(newModel, TrainSet, type = "response")
@@ -157,3 +181,17 @@ lines(roc_train, col = "red")
 auc(HR_Full$HOME_RUN_YES_OR_NO, HR_Full$HR_Pred)
 ```
 
+
+
+```{r}
+HR_Full <- select(HR_Full, c(X, HOME_RUN_YES_OR_NO, HR_Pred, EXIT_VELOCITY, LAUNCH_ANGLE))
+Least_Likely_HR <- filter(HR_Full, HOME_RUN_YES_OR_NO == 1)
+Least_Likely_HR <- as.data.frame(Least_Likely_HR[order(Least_Likely_HR$HR_Pred),])
+Least_Likely_HR
+```
+
+```{r}
+Most_Likely_HR <- filter(HR_Full, HOME_RUN_YES_OR_NO == 0)
+Most_Likely_HR <- as.data.frame(Most_Likely_HR[order(-Most_Likely_HR$HR_Pred),])
+Most_Likely_HR
+```
