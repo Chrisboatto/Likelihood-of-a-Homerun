@@ -1,4 +1,4 @@
-**Likelihood of a Home Run**
+# Likelihood of a Home Run
 
 Home runs have emerged as the primary driver of run production in today's game of baseball, prompting teams to place a premium on players who deliver elite slugging percentages. This power-focused strategy makes sense in an analytics era where one big swing can erase deficits quickly. However, the question remains: do front offices exclusively chase these sluggers, or do they represent just one valuable player archetype among many?
 
