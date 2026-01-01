@@ -26,6 +26,8 @@ library(ggplot2)
 library(ROCR)
 library(corrplot)
 library(pROC)
+install.packages("ragg")
+library(ragg)
 ```
 
 # I first uploaded the data set in RStudio and checked its summary and structure to gain a better understanding of the data. I noticed that there were 98 NA values within the data set. This consitituted 0.1% of the data set so I deemed it prudent to omit them. I noticed two character attributes that I wanted to obtain a better understanding of the data within them. I decided to see the unique values within each and noticed they could definitely play a factor in predicting a home run.
@@ -109,10 +111,19 @@ baseImp
 
 ```{r}
 baseImp <- as.data.frame(baseImp)
-ggplot(baseImp, aes(IncNodePurity, row.names(baseImp))) + 
+# Create the plot and assign it to an object (recommended)
+p <- ggplot(baseImp, aes(x = row.names(baseImp), y = IncNodePurity)) + 
   geom_bar(stat = "identity", width = 0.1, fill = "black") + 
   geom_point(shape = 21, size = 3, colour = "black", fill = "red", stroke = 2) + 
-  labs(title = "Home Run Importance", x = "Importance", y = "Variable")
+  labs(title = "Home Run Importance", x = "Importance", y = "Variable") +
+  coord_flip()  # Optional but recommended for horizontal bars with readable labels
+
+print(p)
+
+# Save the plot to a specific file location
+ggsave(filename = "C:/Users/cboat/OneDrive/Documents/GitHub/Likelihood-of-a-Homerun/Base Model Importance.png", 
+       plot = p, 
+       width = 8, height = 6, dpi = 300, device = "png")
 ```
 
 # Checking the error chart, the base model worked well at reducing the chance of errors.
@@ -131,13 +142,33 @@ newModel <- randomForest(HOME_RUN_YES_OR_NO ~ WIND_DIRECTION + WIND_SPEED + WEAT
 
 ```{r}
 newImp <- importance(newModel)
-newImp
 
-newImp <- as.data.frame(newImp)
-ggplot(newImp, aes(IncNodePurity, row.names(newImp))) + 
-  geom_bar(stat = "identity", width = 0.1, fill = "black") + 
-  geom_point(shape = 21, size = 3, colour = "black", fill = "red", stroke = 2) + 
-  labs(title = "Home Run Importance", x = "Importance", y = "Variable")
+# Convert to data frame and add variable names as a column
+newImp <- data.frame(
+  Variable = rownames(newImp),
+  IncNodePurity = newImp[, "IncNodePurity"]  # adjust if column name differs slightly
+)
+
+# Sort descending for nicer plot
+newImp <- newImp[order(newImp$IncNodePurity, decreasing = TRUE), ]
+# Optional: reset row names so they don't interfere
+rownames(newImp) <- NULL
+
+# === FIXED PLOT CODE ===
+p <- ggplot(newImp, aes(x = Variable, y = IncNodePurity)) +   # ← Use Variable here!
+  geom_bar(stat = "identity", width = 0.1, fill = "black") +
+  geom_point(shape = 21, size = 3, colour = "black", fill = "red", stroke = 2) +
+  labs(title = "Home Run Importance", x = "Importance", y = "Variable") +
+  coord_flip() +   # Makes variable names readable on the y-axis
+  theme_minimal()  # Optional: cleaner look
+
+# Display the plot
+print(p)
+
+# Save it
+ggsave(filename = "C:/Users/cboat/OneDrive/Documents/GitHub/Likelihood-of-a-Homerun/New Model Importance.png", 
+       plot = p, 
+       width = 8, height = 6, dpi = 300, device = "png")
 ```
 
 ```{r}
